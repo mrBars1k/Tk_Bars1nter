@@ -23,33 +23,26 @@ tab1 = ttk.Frame(tab_control)
 tab2 = ttk.Frame(tab_control)
 tab3 = ttk.Frame(tab_control)
 
-## ## Названия вкладок;
+## ## названия вкладок;
 
 tab_control.add(tab1)
 tab_control.add(tab2)
 tab_control.add(tab3)
-
 tab_control.pack(expand=1, fill='both')
-
-## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
-## ## копия базы данных;
-
-def create_backup():
-    current_datetime = datetime.now().strftime("%Y_%m_%d_%H_%M_%S") ## дата в формате;
-    backup_filename = f"vocabulary_backup_{current_datetime}.db" ## новое имя файла;
-    current_database = "V:/Py_Pro/Bars_Tkinter/vocabulary.db" ## путь к бд;
-    shutil.copy(current_database, backup_filename) ## копирование;
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
 def switch_to_tab1():
     tab_control.select(tab1)
+    update_button_labels(switch_to_tab1_button)
 
 def switch_to_tab2():
     tab_control.select(tab2)
+    update_button_labels(switch_to_tab2_button)
 
 def switch_to_tab3():
     tab_control.select(tab3)
+    update_button_labels(switch_to_tab3_button)
 
 ## ## ## ##
 
@@ -61,6 +54,24 @@ switch_to_tab1_button.place(x=500, y=10)
 switch_to_tab2_button.place(x=700, y=10)
 switch_to_tab3_button.place(x=900, y=10)
 
+## ## ## ##
+## изначальные названия;
+original_button_labels = {
+    switch_to_tab1_button: ("Словарь", "SystemButtonFace"),
+    switch_to_tab2_button: ("Обучение", "SystemButtonFace"),
+    switch_to_tab3_button: ("Прогресс", "SystemButtonFace")
+}
+
+## ## ## ##
+## обновление названий;
+def update_button_labels(active_button):
+    for button, (label, color) in original_button_labels.items():
+        if button == active_button:
+            button.config(text=f"<{label}>", bg="#00FFFF")
+        else:
+            button.config(text=label, bg=color)
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 ## ## ## ##
 
 adb = sqlite3.connect("vocabulary.db")
@@ -77,6 +88,27 @@ cur.execute("""CREATE TABLE IF NOT EXISTS words (
 );""")
 adb.commit()
 
+## ## ## ##
+
+cur.execute("""CREATE TABLE IF NOT EXISTS recycle_bin (
+    id            INTEGER PRIMARY KEY,
+    english       TEXT    UNIQUE,
+    russian       TEXT    UNIQUE,
+    transcription TEXT    UNIQUE,
+    deleted_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);""")
+adb.commit()
+
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
+## ## копия базы данных;
+
+def create_backup():
+    current_datetime = datetime.now().strftime("%Y_%m_%d_%H_%M_%S") ## дата в формате;
+    backup_filename = f"vocabulary_backup_{current_datetime}.db" ## новое имя файла;
+    current_database = "V:/Py_Pro/Bars_Tkinter/vocabulary.db" ## путь к бд;
+    shutil.copy(current_database, backup_filename) ## копирование;
+
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
 def delete_selected():
@@ -91,9 +123,24 @@ def delete_selected():
             record_id = values[0]
 
             if record_id:
+                # Сначала скопируйте запись в корзину
+                cur.execute(
+                    "INSERT INTO recycle_bin (english, russian, transcription) SELECT english, russian, transcription FROM words WHERE ID = ?",
+                    (record_id,))
+
                 cur.execute("DELETE FROM words WHERE ID = ?", (record_id,))
     adb.commit()
     update_table()
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
+
+def focus_next(event):
+    event.widget.tk_focusNext().focus()
+
+## ## ## ##
+
+def focus_previous(event):
+    event.widget.tk_focusPrev().focus()
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
@@ -106,17 +153,18 @@ def update_table(): ## вывод всех данных из бд;
         tree.insert("", "end", values=row)
 
 ## ## ## ##
-
+lbl_notall = None
 def clicked():
     eng_text = eng_entry.get()
     ru_text = ru_entry.get()
     trans_text = trans_entry.get()
 
-    if eng_text and ru_text and trans_text:
-        print("Английский:", eng_text)
-        print("Русский:", ru_text)
-        print("Транскрипция:", trans_text)
+    global lbl_notall  # Объявляем переменную lbl_notall как глобальную
 
+    if lbl_notall:
+        lbl_notall.destroy()  # Убирает надпись, если она есть
+
+    if eng_text and ru_text and trans_text:
         cur.execute("INSERT INTO words (english, russian, transcription) VALUES (?, ?, ?)",
                        (eng_text, ru_text, trans_text))
         adb.commit()
@@ -130,7 +178,16 @@ def clicked():
         update_table()
 
     else:
-        print("Пожалуйста, заполните все поля перед отправкой.")
+        custom_font = ("Helvetica", 16)
+        lbl_notall = Label(tab1, text="Заполните все поля!", font=custom_font)
+        lbl_notall.place(x=30, y=340)
+
+## ## ## ##
+
+def clear_fields(): ## отчистка полей ввода;
+    eng_entry.delete(0, END)
+    ru_entry.delete(0, END)
+    trans_entry.delete(0, END)
 
 ## ## ## ##
 
@@ -151,7 +208,6 @@ def reorder_and_update():
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
-btn = Button(tab1, text="Отправить!", width=30, height=1, command=click_and)
 ##
 eng_lbl = Label(tab1, text="Английский")
 eng_entry = Entry(tab1, width=30, borderwidth=2)
@@ -173,7 +229,6 @@ ru_entry.place(x=40, y=90)
 trans_lbl.place(x=40, y=120)
 trans_entry.place(x=40, y=140)
 ##
-btn.place(x=20, y=180)
 
 ## ## ## ##
 
@@ -190,25 +245,40 @@ tree.heading("#1", text="ID")
 tree.heading("#2", text="Английский")
 tree.heading("#3", text="Русский")
 tree.heading("#4", text="Транскрипция")
-tree.place(x=300, y=60, height=600, width=950)
+tree.place(x=310, y=60, height=600, width=950)
 update_table()
 
 ## ## ## ##
-
-reorder_btn = Button(tab1, text="Упорядочить и обновить", width=30, height=1, command=reorder_and_update)
-reorder_btn.place(x=20, y=240)
+btn = Button(tab1, text="Отправить!", width=30, height=1, command=click_and)
+btn.place(x=20, y=200)
 ## ##
 delete_btn = Button(tab1, text="Удалить", width=30, height=1, command=delete_selected)
-delete_btn.place(x=20, y=210)
+delete_btn.place(x=20, y=230)
+## ##
+reorder_btn = Button(tab1, text="Упорядочить и обновить", width=30, height=1, command=reorder_and_update)
+reorder_btn.place(x=20, y=270)
 ## ##
 delete_btn = Button(tab1, text="Создать копию базы данных", width=30, height=1, command=create_backup)
-delete_btn.place(x=20, y=270)
+delete_btn.place(x=20, y=300)
+## ##
+clear_button = Button(tab1, text="Очистить\nполя", width=8, height=8, command=clear_fields)
+clear_button.place(x=235, y=36)
 
 ## ## ## ##
 
 eng_entry.bind("<Return>", lambda event=None: ru_entry.focus_set())
 ru_entry.bind("<Return>", lambda event=None: trans_entry.focus_set())
 trans_entry.bind("<Return>", lambda event=None: clicked())
+
+eng_entry.bind("<Down>", focus_next)  # Перемещение вниз при нажатии на стрелку вниз
+eng_entry.bind("<Up>", focus_previous)  # Перемещение вверх при нажатии на стрелку вверх
+
+ru_entry.bind("<Down>", focus_next)
+ru_entry.bind("<Up>", focus_previous)
+ru_entry.bind("<Left>", focus_previous)  # Опционально: перемещение к предыдущему полю при нажатии стрелки влево
+
+trans_entry.bind("<Down>", focus_next)
+trans_entry.bind("<Up>", focus_previous)
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
