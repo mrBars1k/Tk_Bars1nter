@@ -4,6 +4,7 @@ import sqlite3
 import shutil
 import os
 from datetime import datetime
+import random
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 ## ## ГЛАВНОЕ ОКНО
@@ -25,9 +26,9 @@ tab3 = ttk.Frame(tab_control)
 
 ## ## названия вкладок;
 
-tab_control.add(tab1)
-tab_control.add(tab2)
-tab_control.add(tab3)
+tab_control.add(tab1, text=" ")
+tab_control.add(tab2, text=" ")
+tab_control.add(tab3, text=" ")
 tab_control.pack(expand=1, fill='both')
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
@@ -35,14 +36,18 @@ tab_control.pack(expand=1, fill='both')
 def switch_to_tab1():
     tab_control.select(tab1)
     update_button_labels(switch_to_tab1_button)
+    m_window.unbind("<space>")
 
 def switch_to_tab2():
     tab_control.select(tab2)
     update_button_labels(switch_to_tab2_button)
+    m_window.bind("<space>", toggle_translation)
 
 def switch_to_tab3():
     tab_control.select(tab3)
     update_button_labels(switch_to_tab3_button)
+    m_window.unbind("<space>")
+
 
 ## ## ## ##
 
@@ -74,7 +79,7 @@ def update_button_labels(active_button):
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 ## ## ## ##
 
-adb = sqlite3.connect("vocabulary.db")
+adb = sqlite3.connect("V:/Py_Pro/Tk_Bars1nter/vocabulary.db")
 cur = adb.cursor()
 
 ## ## ## ##
@@ -84,7 +89,10 @@ cur.execute("""CREATE TABLE IF NOT EXISTS words (
     english       TEXT    UNIQUE,
     russian       TEXT    UNIQUE,
     transcription TEXT    UNIQUE,
-    learned       INTEGER DEFAULT 0
+    learned       INTEGER DEFAULT 0,
+    added_date    TEXT,
+    enough_date   TEXT,
+    learned_count INTEGER
 );""")
 adb.commit()
 
@@ -98,7 +106,6 @@ cur.execute("""CREATE TABLE IF NOT EXISTS recycle_bin (
     deleted_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );""")
 adb.commit()
-
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 ## ## копия базы данных;
@@ -153,6 +160,7 @@ def update_table(): ## вывод всех данных из бд;
         tree.insert("", "end", values=row)
 
 ## ## ## ##
+
 lbl_notall = None
 def clicked():
     eng_text = eng_entry.get()
@@ -208,7 +216,6 @@ def reorder_and_update():
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
-##
 eng_lbl = Label(tab1, text="Английский")
 eng_entry = Entry(tab1, width=30, borderwidth=2)
 ##
@@ -279,6 +286,66 @@ ru_entry.bind("<Left>", focus_previous)  # Опционально: переме�
 
 trans_entry.bind("<Down>", focus_next)
 trans_entry.bind("<Up>", focus_previous)
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
+## ## ## ##
+
+cw = 'Открыто'
+def toggle_translation(event=None):
+    global cw
+    if cw == 'Открыто':
+        cw = 'Скрыто'
+        new_text = "Показать перевод"
+        russian_translation_label.configure(text=f"{word1[1]}")
+        toggle_translation_button.configure(text=new_text)
+
+    elif cw == 'Скрыто':
+        new_text = "Скрыть перевод"
+        cw = 'Открыто'
+        toggle_translation_button.configure(text=new_text)
+        russian_translation_label.configure(text=' ')
+
+## ## ## ##
+
+def learn_word():
+    cur.execute("""SELECT english, russian, transcription, learned FROM words""")
+    word1 = cur.fetchall()
+    word2 = []
+    for i in word1:
+        if i[3] <= 10:
+            word2 += {i}
+    random_word = random.choice(word2)
+    return random_word
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
+
+word1 = learn_word()
+
+empty_word_label  = Label(tab2, text=" ")
+english_word_label  = Label(tab2, text=f"{word1[0]}", font=("Helvetica", 34), anchor="center")
+russian_translation_label  = Label(tab2, text=f" ", font=("Helvetica", 16), anchor="center", wraplength=400)
+transcription_label  = Label(tab2, text=f"{word1[2]}", font=("Helvetica", 12), anchor="center")
+
+empty_word_label.pack(pady=70)
+english_word_label.pack()
+transcription_label.pack()
+
+toggle_translation_button = Button(tab2, text="Показать перевод", font=("Helvetica", 18), width=30, height=1, command=toggle_translation, bg='pink')
+toggle_translation_button.pack(pady=20)
+
+russian_translation_label.pack(pady=40)
+
+# next_button = Button(tab2, text="Далее", font=("Helvetica", 16), width=16, height=1, bg='blue', command=next_word)
+# next_button.place(x=535, y=450)
+
+next_button1 = Button(tab2, text="Плохо", font=("Helvetica", 16), width=16, height=1, bg='red')
+next_button1.place(x=245, y=550)
+
+next_button2 = Button(tab2, text="Хорошо", font=("Helvetica", 16), width=16, height=1, bg='green')
+next_button2.place(x=535, y=550)
+
+next_button3 = Button(tab2, text="Отлично", font=("Helvetica", 16), width=16, height=1, bg='yellow')
+next_button3.place(x=825, y=550)
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
