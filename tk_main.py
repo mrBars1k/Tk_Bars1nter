@@ -3,7 +3,7 @@ from tkinter import ttk
 import sqlite3
 import shutil
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
@@ -82,6 +82,21 @@ def update_button_labels(active_button):
 adb = sqlite3.connect("V:/Py_Pro/Tk_Bars1nter/vocabulary.db")
 cur = adb.cursor()
 
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
+
+def upd_learned():
+    cur.execute("SELECT * FROM words WHERE learned > 10")
+    for i in cur.fetchall():
+        current_date = datetime.now() + timedelta(weeks=1)
+        enough_date = current_date.strftime("%d.%m.%Y_%H:%M")
+        cur.execute("UPDATE words SET enough_date = ?, learned = 0, learned_count = learned_count + 1 WHERE id = ?", (enough_date, i[0]))
+    adb.commit()
+
+def upd_date_learn():
+    current_date = datetime.now().strftime("%d.%m.%Y_%H:%M")
+    cur.execute("UPDATE words SET op_cl = CASE WHEN enough_date <= ? THEN 'open' ELSE 'close' END", (current_date,))
+    adb.commit()
+
 ## ## ## ##
 
 cur.execute("""CREATE TABLE IF NOT EXISTS words (
@@ -92,7 +107,8 @@ cur.execute("""CREATE TABLE IF NOT EXISTS words (
     learned       INTEGER DEFAULT 0,
     added_date    TEXT,
     enough_date   TEXT,
-    learned_count INTEGER
+    learned_count INTEGER,
+    op_cl         TEXT
 );""")
 adb.commit()
 
@@ -103,7 +119,10 @@ cur.execute("""CREATE TABLE IF NOT EXISTS recycle_bin (
     english       TEXT    UNIQUE,
     russian       TEXT    UNIQUE,
     transcription TEXT    UNIQUE,
-    deleted_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    deleted_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    added_date    TEXT,
+    enough_date   TEXT,
+    learned_count INTEGER
 );""")
 adb.commit()
 
@@ -142,12 +161,22 @@ def delete_selected():
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
 def focus_next(event):
-    event.widget.tk_focusNext().focus()
+    # event.widget.tk_focusNext().focus()
+    current_widget = event.widget
+    if current_widget == eng_entry:
+        ru_entry.focus_set()
+    elif current_widget == ru_entry:
+        trans_entry.focus_set()
 
 ## ## ## ##
 
 def focus_previous(event):
-    event.widget.tk_focusPrev().focus()
+    # event.widget.tk_focusPrev().focus()
+    current_widget = event.widget
+    if current_widget == trans_entry:
+        ru_entry.focus_set()
+    elif current_widget == ru_entry:
+        eng_entry.focus_set()
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
@@ -167,14 +196,16 @@ def clicked():
     ru_text = ru_entry.get()
     trans_text = trans_entry.get()
 
-    global lbl_notall  # Объявляем переменную lbl_notall как глобальную
+    current_date = datetime.now().strftime("%d.%m.%Y_%H:%M")
+
+    global lbl_notall
 
     if lbl_notall:
-        lbl_notall.destroy()  # Убирает надпись, если она есть
+        lbl_notall.destroy()
 
     if eng_text and ru_text and trans_text:
-        cur.execute("INSERT INTO words (english, russian, transcription) VALUES (?, ?, ?)",
-                       (eng_text, ru_text, trans_text))
+        cur.execute("INSERT INTO words (english, russian, transcription, learned, added_date) VALUES (?, ?, ?, ?, ?)",
+                       (eng_text, ru_text, trans_text, 0, current_date))
         adb.commit()
 
         ## очищает поля ввода, после отправки;
@@ -277,54 +308,80 @@ eng_entry.bind("<Return>", lambda event=None: ru_entry.focus_set())
 ru_entry.bind("<Return>", lambda event=None: trans_entry.focus_set())
 trans_entry.bind("<Return>", lambda event=None: clicked())
 
-eng_entry.bind("<Down>", focus_next)  # Перемещение вниз при нажатии на стрелку вниз
-eng_entry.bind("<Up>", focus_previous)  # Перемещение вверх при нажатии на стрелку вверх
+eng_entry.bind("<Down>", focus_next)  ## фокус вниз стрелкой на клаве;
+eng_entry.bind("<Up>", focus_previous)  ## фокус вверх стрелкой на клаве;
 
 ru_entry.bind("<Down>", focus_next)
 ru_entry.bind("<Up>", focus_previous)
-ru_entry.bind("<Left>", focus_previous)  # Опционально: перемещение к предыдущему полю при нажатии стрелки влево
 
 trans_entry.bind("<Down>", focus_next)
 trans_entry.bind("<Up>", focus_previous)
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 ## ## ## ##
-
-cw = 'Открыто'
-def toggle_translation(event=None):
+random_word = None
+cw = 'Скрыто'
+def next_word():
     global cw
-    if cw == 'Открыто':
-        cw = 'Скрыто'
-        new_text = "Показать перевод"
-        russian_translation_label.configure(text=f"{word1[1]}")
-        toggle_translation_button.configure(text=new_text)
+    global random_word
 
-    elif cw == 'Скрыто':
-        new_text = "Скрыть перевод"
-        cw = 'Открыто'
-        toggle_translation_button.configure(text=new_text)
-        russian_translation_label.configure(text=' ')
-
-## ## ## ##
-
-def learn_word():
-    cur.execute("""SELECT english, russian, transcription, learned FROM words""")
+    cur.execute("""SELECT english, russian, transcription, learned, id FROM words""")
     word1 = cur.fetchall()
     word2 = []
+
     for i in word1:
         if i[3] <= 10:
             word2 += {i}
+
     random_word = random.choice(word2)
+    english_word_label.configure(text=f'{random_word[0]}')
+    transcription_label.configure(text=f'{random_word[2]}')
+
+    if cw == 'Открыто':
+        russian_translation_label.configure(text=f' ')
+        toggle_translation_button.configure(text=f'Показать перевод')
+        cw = 'Скрыто'
+
     return random_word
+
+def bad_known():
+    print(random_word[4])
+    cur.execute("UPDATE words SET learned = learned - 1 WHERE id = ?", (random_word[4], ))
+    next_word()
+    adb.commit()
+
+def good_known():
+    print(random_word[4])
+    cur.execute("UPDATE words SET learned = learned + 1 WHERE id = ?", (random_word[4], ))
+    next_word()
+    adb.commit()
+
+def perfect_known():
+    print(random_word[4])
+    cur.execute("UPDATE words SET learned = learned + 2 WHERE id = ?", (random_word[4], ))
+    next_word()
+    adb.commit()
 
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 
-word1 = learn_word()
+def toggle_translation(event=None):
+    global cw
+    if cw == 'Скрыто':
+        cw = 'Открыто'
+        new_text = "Скрыть перевод"
+        russian_translation_label.configure(text=f"{random_word[1]}")
+        toggle_translation_button.configure(text=new_text)
+
+    elif cw == 'Открыто':
+        new_text = "Показать перевод"
+        cw = 'Скрыто'
+        toggle_translation_button.configure(text=new_text)
+        russian_translation_label.configure(text=' ')
 
 empty_word_label  = Label(tab2, text=" ")
-english_word_label  = Label(tab2, text=f"{word1[0]}", font=("Helvetica", 34), anchor="center")
+english_word_label  = Label(tab2, text=f" ", font=("Helvetica", 34), anchor="center")
 russian_translation_label  = Label(tab2, text=f" ", font=("Helvetica", 16), anchor="center", wraplength=400)
-transcription_label  = Label(tab2, text=f"{word1[2]}", font=("Helvetica", 12), anchor="center")
+transcription_label  = Label(tab2, text=f" ", font=("Helvetica", 12), anchor="center")
 
 empty_word_label.pack(pady=70)
 english_word_label.pack()
@@ -335,20 +392,20 @@ toggle_translation_button.pack(pady=20)
 
 russian_translation_label.pack(pady=40)
 
-# next_button = Button(tab2, text="Далее", font=("Helvetica", 16), width=16, height=1, bg='blue', command=next_word)
-# next_button.place(x=535, y=450)
+next_button = Button(tab2, text="Далее", font=("Helvetica", 16), width=16, height=1, bg='blue', command=next_word)
+next_button.place(x=535, y=450)
 
-next_button1 = Button(tab2, text="Плохо", font=("Helvetica", 16), width=16, height=1, bg='red')
+next_button1 = Button(tab2, text="Плохо", font=("Helvetica", 16), width=16, height=1, bg='red', command=bad_known)
 next_button1.place(x=245, y=550)
 
-next_button2 = Button(tab2, text="Хорошо", font=("Helvetica", 16), width=16, height=1, bg='green')
+next_button2 = Button(tab2, text="Хорошо", font=("Helvetica", 16), width=16, height=1, bg='green', command=good_known)
 next_button2.place(x=535, y=550)
 
-next_button3 = Button(tab2, text="Отлично", font=("Helvetica", 16), width=16, height=1, bg='yellow')
+next_button3 = Button(tab2, text="Отлично", font=("Helvetica", 16), width=16, height=1, bg='yellow', command=perfect_known)
 next_button3.place(x=825, y=550)
 
+next_word()
 ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##
-
 m_window.mainloop() ## запуск программы;
 adb.close() ## закрыть подключение;
 
