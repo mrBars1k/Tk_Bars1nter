@@ -90,11 +90,13 @@ def upd_learned():
         current_date = datetime.now() + timedelta(weeks=1)
         enough_date = current_date.strftime("%d.%m.%Y_%H:%M")
         cur.execute("UPDATE words SET enough_date = ?, learned = 0, learned_count = learned_count + 1 WHERE id = ?", (enough_date, i[0]))
+    print('СДЕЛАНО: upd_leard')
     adb.commit()
 
 def upd_date_learn():
     current_date = datetime.now().strftime("%d.%m.%Y_%H:%M")
     cur.execute("UPDATE words SET op_cl = CASE WHEN enough_date <= ? THEN 'open' ELSE 'close' END", (current_date,))
+    print('СДЕЛАНО: upd_date_learn')
     adb.commit()
 
 ## ## ## ##
@@ -107,8 +109,8 @@ cur.execute("""CREATE TABLE IF NOT EXISTS words (
     learned       INTEGER DEFAULT 0,
     added_date    TEXT,
     enough_date   TEXT,
-    learned_count INTEGER,
-    op_cl         TEXT
+    learned_count INTEGER DEFAULT (0),
+    op_cl         TEXT    DEFAULT open
 );""")
 adb.commit()
 
@@ -237,11 +239,11 @@ def click_and():
 ## ## ## ##
 
 def reorder_and_update():
-    cur.execute("SELECT ID, russian, english, transcription FROM words ORDER BY ID")
+    cur.execute("SELECT ID, russian, english, transcription, learned, added_date, enough_date, learned_count, op_cl FROM words ORDER BY ID")
     data = cur.fetchall()
     cur.execute("DELETE FROM words")
     for index, row in enumerate(data):
-        cur.execute("INSERT INTO words (ID, russian, english, transcription) VALUES (?, ?, ?, ?)", (index + 1, row[1], row[2], row[3]))
+        cur.execute("INSERT INTO words (ID, russian, english, transcription, learned, added_date, enough_date, learned_count, op_cl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (index + 1, row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8],))
     adb.commit()
     update_table()
 
@@ -322,6 +324,7 @@ trans_entry.bind("<Up>", focus_previous)
 random_word = None
 cw = 'Скрыто'
 def next_word():
+    upd_learned()
     global cw
     global random_word
 
@@ -347,18 +350,21 @@ def next_word():
 def bad_known():
     print(random_word[4])
     cur.execute("UPDATE words SET learned = learned - 1 WHERE id = ?", (random_word[4], ))
+    upd_learned()
     next_word()
     adb.commit()
 
 def good_known():
     print(random_word[4])
     cur.execute("UPDATE words SET learned = learned + 1 WHERE id = ?", (random_word[4], ))
+    upd_learned()
     next_word()
     adb.commit()
 
 def perfect_known():
     print(random_word[4])
     cur.execute("UPDATE words SET learned = learned + 2 WHERE id = ?", (random_word[4], ))
+    upd_learned()
     next_word()
     adb.commit()
 
